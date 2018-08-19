@@ -1,0 +1,118 @@
+
+* porting driver from linux to freebsd
+* adding some improves from windows driver by revers engineeging
+
+Project discontinue since 2008 year
+https://www.freshports.org/net/skystar2
+
+------------------
+Driver for DVB-S card TechniSat SkyStar 2 TV PCI
+
+TABLE OF CONTENTS
+*****************
+1. Disclaimer
+2. Installation
+3. Adjustment and use
+3.1 Dvbnet
+3.2 Dvbtune
+3.3 Monitor
+4. Obtaining
+5. Bugs
+6. Contact Emails
+
+
+1. Disclaimer
+-------------
+
+We are not liable for any damage caused by the use of this program.
+
+In this version of the driver there is no support of TV,
+only reception of data.
+
+2. Installation
+---------------
+
+This driver requires source kernel to compile.
+
+#cd /usr/ports/net/skystar2
+#make install clean
+
+This will put the binary in /usr/local/bin and config in
+/usr/local/etc/
+
+To use these drivers, make sure that you have loaded the skystar2
+kernel module, by doing
+# kldload skystar2
+or adding
+skystar2_load="YES"
+to your /boot/loader.conf.
+
+3. Adjustment and use
+---------------
+
+3.1 Dvbnet
+--------------------
+
+At first it is necessary to create the device and to be 
+adjusted on PID the satellite provider.
+
+# dvbnet -p 402
+Status: device dvb0 for pid 402 created successfuly
+
+After that there should be a device dvb0.
+
+Options:
+--------
+-a[num] adapter
+-p[pid] create if with pid
+-d[num] del if by number
+-l show list pids
+
+3.2 Dvbtune
+--------------------
+
+Now it is necessary configure a card on other parameters of reception 
+of our signal satellite provider. (frequency, polarization, speed of a stream etc).
+For this purpose the file /usr/local/etc/channels.conf is necessary.
+
+# cd /usr/local/etc/
+# cp channels.conf.dist channels.conf
+
+Adjustments represent a text line with parameters divided by a colon.
+
+name:frequency:polarization:fec:sat_no:symbolrate:inv:
+
+frequency: MHz
+polarisation: h,v
+fec: 1/2,2/3,3/4,5/6,7/8,auto
+sat_no: switch to LNB number 0...4
+symbolrate:
+inv:   spectral inversion auto,on,off
+
+SkyDSL:11481:h:7/8:0:41250:0:0:0
+
+SkyDSL - the name. The name Perhaps, for example my_provider
+11481 - frequency 
+v - polarization is simple.
+7/8 - FEC
+41250 - Speed of a stream (Symbol rate)
+
+# dvbtune -c /usr/local/etc/channels.conf -x -n1
+
+Options:
+--------
+-h, -? help config
+-a[num] adapter
+-l list channel
+-n[num] channel number
+-c[file name] config file
+-m monitor
+-x exit after tuning
+
+
+3.3 Monitor
+--------------
+
+To look a level and capture of a signal it is possible by means of the utility monitor
+
+# monitor
