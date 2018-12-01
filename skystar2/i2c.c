@@ -5,115 +5,367 @@
 #include "i2c.h"
 #include "sllutil.h"
 
-/*---------------------------------------------------------------*/
-static u_int32_t
-i2cMainIO(struct adapter *sc, u_int32_t cmd, u_int8_t *buf, u_int32_t retr)
-{
-	u_int32_t i, val;
-	
-	write_reg(sc, 0x100, 0);
-	write_reg(sc, 0x100, cmd);
-
-	for (i = 0; i < retr; i++)
-	{
-		val = read_reg(sc, 0x100);
-		if ( (val & 0x40000000) == 0)
-		{
-			if ( (val & 0x81000000) == 0x80000000)
-			{
-			 if (buf != 0) *buf = (val >> 0x10) & 0xff;
-				return 1;
-			}
-		} else {
-			write_reg(sc, 0x100, 0);
-			write_reg(sc, 0x100, cmd);
-		}
-	}
-	return 0;
-}
-
-/*================================================================
-	device = 0x10000000 for tuner
-		 0x20000000 for eeprom
-  ================================================================*/
 /*----------------------------------------------------------------*/
 static u_int32_t
-i2cMainSetup(u_int32_t device, u_int32_t chip_addr, u_int8_t op, u_int8_t addr, u_int32_t val, u_int32_t len)
+FlexI2cRW(struct adapter *sc,	//0
+	u_int32_t device,	//4
+	u_int32_t chip_addr,	//8
+	u_int32_t dir,	//C
+	u_int16_t addr,	//10
+	u_int8_t *buf,	//14
+	u_int32_t len,	//18
+	unsigned int unkC,	//1C
+	unsigned int retr,	//20
+	unsigned int unkD,	//24
+	unsigned int unkE,	//28
+	unsigned int unkF,	//2C
+	unsigned int unk14,	//30
+	unsigned int eeprom,	//34
+	unsigned int bank)	//38
 {
 	u_int32_t cmd;
+	u_int32_t val;
+	u_int32_t bankaddr;
+	u_int32_t bankval;
+	int i;
+	int r;
+	int res;
+	int state;
+	int done;
 
-	cmd = device | ((len-1)<<26) | (val<<16) | (addr<<8) | chip_addr;
-	if (op != 0) cmd |= 0x03000000;
-		else cmd |= 0x01000000;
-	return cmd;
-}
+	res = 0;
 
-
-/*----------------------------------------------------------------*/
-static u_int32_t
-FlexI2cRead4(struct adapter *sc, u_int32_t device, u_int32_t chip_addr, u_int16_t addr, u_int8_t *buf, u_int8_t len)
-{
-	u_int32_t cmd,val;
-	int res, i;
-
-	cmd = i2cMainSetup(device, chip_addr, 1, addr, 0, len);
-	res = i2cMainIO(sc, cmd, buf, 100000);
-
-	if ( (res & 0xff) != 0)
+	if (bank)
 	{
+		if (device == 0x20000000)
+			bankaddr = 0x10C;
+		else
+		if (device == 0x30000000)
+			bankaddr = 0x110;
+		else
+			bankaddr = 0x108;
+
+		bankval = read_reg(sc, bankaddr);
+
+		write_reg(sc, bankaddr, bank);
+	}
+
+	state = unkD ? 3 : 0;
+
+	if (addr > 0xFF && eeprom == 1)
+	{
+		chip_addr |= ((addr >> 8) & 3);
+	}
+
+	cmd = device | ((len - 1) << 26) | (1 << 16) | (addr << 8) | chip_addr;
+
+	if (dir != 0)
+	{
+		cmd |= 0x2000000;
+	} else
+	{
+		cmd |= (buf[0] << 16);
+
 		if (len > 1)
 		{
-			val = read_reg(sc, 0x104);
-			for (i = 1; i < len; i++)
+			val = 0;
+			for (i = len; i > 1; i--)
 			{
-				buf[i] = val & 0xff;
-				val = val >> 8;
+				val <<= 8;
+				val |= buf[i-1];
 			}
+
+			write_reg(sc, 0x104, val);
 		}
 	}
-	return res;
-}
 
-/*----------------------------------------------------------------*/
-static u_int32_t
-FlexI2cWrite4(struct adapter *sc, u_int32_t device, u_int32_t chip_addr, u_int16_t addr, u_int8_t *buf, u_int8_t len)
-{
-	u_int32_t cmd,val;
-	int res, i;
+	done = 0;
 
-	if (len > 1)
+	for (r = 0; r < 100000; r++)
 	{
-		val = 0;
-		for (i = len; i > 1; i--)
+		if (done != 0)
+			break;
+
+		switch (state)
 		{
-			val = val << 8;
-			val = val | buf[i-1];
-		}
-		write_reg(sc, 0x104, val);
+		case 3:
+			write_reg(sc, 0x100, 0);
+			write_reg(sc, 0x100, device | ((unkE | unkD | 0x100) << 16) | (unkF << 8) | unk14);
+			state = 5;
+			break;
+
+		case 5:
+			val = read_reg(sc, 0x100);
+			if (val & 0x40000000)
+			{
+				if (retr--)
+					state = 3;
+				else
+					done = 1;
+			} else
+			{
+				if ((val & 0x81000000) == 0x80000000)
+					state = 0;
+			}
+			break;
+
+		case 0:
+			write_reg(sc, 0x100, 0);
+			write_reg(sc, 0x100, cmd);
+
+			if ((unkC != 0) && (cmd & 0x2000000))
+				state = 1;
+			else
+				state = 2;
+			break;
+
+		case 1:
+			val = read_reg(sc, 0x100);
+		
+			if (! (val &  0x40000000) )
+				break;
+
+			write_reg(sc, 0x100, 0);
+
+			if (unkD == 0)
+			{
+				write_reg(sc, 0x100, cmd | 0x40000000);
+				state = 2;
+			} else
+			{
+				write_reg(sc, 0x100, device | ((unkE | unkD | 0x100) << 16) | (unkF << 8) | unk14);
+				state = 6;
+			}
+			break;
+
+		case 6:	
+			val = read_reg(sc, 0x100);
+
+			if (val & 0x40000000)
+			{
+				if (retr --)
+					state = 1;
+				else
+					done = 1;
+			} else
+			{
+				if ((val & 0x81000000) == 0x80000000)
+				{
+					write_reg(sc, 0x100, 0);
+					write_reg(sc, 0x100, cmd | 0x40000000);
+					state = 2;
+				}
+			}
+			break;
+
+		case 2:
+			val = read_reg(sc, 0x100);
+
+			if (val & 0x40000000)
+			{
+				if (retr --)
+				{
+					state = unkD ? 3 : 0;
+				} else
+				{
+					if (dir != 0 && len > 0)
+						memset(&buf[0], 0xFF, len);
+				}
+			} else
+			{
+				if ((val & 0x81000000) != 0x80000000)
+					break;
+
+				if (dir != 0)
+				{
+					buf[0] = (val >> 16) & 0xFF;
+
+					if (len > 1)
+					{
+						val = read_reg(sc, 0x104);
+
+						for (i = 1; i < len; i++)
+						{
+							buf[i] = val & 0xFF;
+							val >>= 8;
+						}
+					}
+				}
+				res = 1;
+			}
+			done = 1;
+			break;
+
+		} //switch
+
+	} // for
+
+	if (bankval)
+	{
+		write_reg(sc, bankaddr, bankval);
 	}
 
-	cmd = i2cMainSetup(device, chip_addr, 0, addr, buf[0], len);
-	res = i2cMainIO(sc, cmd, 0 , 100000);
-	
 	return res;
 }
-
+		
+/*----------------------------------------------------------------*/
+static u_int32_t
+FlexI2cRead4(struct adapter *sc,
+		unsigned int device,
+		unsigned int chip_addr,
+		unsigned short addr,
+		unsigned char *buf,
+		unsigned int len,
+		unsigned int unkC,
+		unsigned int retr,	//unk8
+		unsigned int unkD,
+		unsigned int unkE,
+		unsigned int unkF,
+		unsigned int unk14,
+		unsigned int eeprom,	//unk10
+		unsigned int bank)	//unk18
+{
+	return FlexI2cRW(sc,		//0
+			device,		//4
+			chip_addr,	//8
+			1,		//C
+			addr,		//10
+			buf,		//14
+			len,		//18
+			unkC,		//1C
+			retr,		//20
+			unkD,		//24
+			unkE,		//28
+			unkF,		//2C
+			unk14,		//30
+			eeprom,		//34
+			bank);		//38
+}
 
 /*----------------------------------------------------------------*/
 static u_int32_t
-fixChipAddr(u_int32_t device, u_int32_t bus, u_int32_t addr)
+FlexI2cWrite4(struct adapter *sc,
+		unsigned int device,
+		unsigned int chip_addr,
+		unsigned short addr,
+		unsigned char *buf,
+		unsigned int len,
+		unsigned int unkC,
+		unsigned int retr,	//unk8
+		unsigned int unkD,
+		unsigned int unkE,
+		unsigned int unkF,
+		unsigned int unk14,
+		unsigned int eeprom,	//unk10
+		unsigned int bank)	//unk18
 {
-	if (device == 0x20000000) 
-		return bus | ((addr >> 8) & 3);
-	return bus;
+	return FlexI2cRW(sc,
+			device,
+			chip_addr,
+			0,
+			addr,
+			buf,
+			len,
+			unkC,
+			retr,
+			unkD,
+			unkE,
+			unkF,
+			unk14,
+			eeprom,
+			bank);
 }
 
 
 /*----------------------------------------------------------------*/
 u_int32_t
+FLEXI2C_busRead(struct adapter *sc, struct _I2CBUS *bus, u_int32_t addr, u_int8_t *buf, u_int32_t len)
+{
+	u_int32_t bytes2transfer;
+	u_int8_t *start;
+
+	if (bus == NULL)
+		return 0;
+
+	start = buf;
+	while (len != 0)
+	{
+		bytes2transfer = len;
+
+		if (bytes2transfer > 4)
+			bytes2transfer = 4;
+
+		if (FlexI2cRead4(sc,
+				bus->device,
+				bus->unk4,
+				addr,
+				buf,
+				bytes2transfer,
+				bus->unkC,
+				bus->retr,
+				bus->unkD,
+				bus->unkE,
+				bus->unkF,
+				bus->unk14,
+				bus->eeprom,
+				bus->unk18) == 0)
+			return (buf - start);
+
+		buf += bytes2transfer;
+		addr += bytes2transfer;
+		len -= bytes2transfer;
+	}
+	return (buf - start);
+}
+
+/*----------------------------------------------------------------*/
+u_int32_t
+FLEXI2C_busWrite(struct adapter *sc, struct _I2CBUS *bus, u_int32_t addr, u_int8_t *buf, u_int32_t len)
+{
+	u_int32_t bytes2transfer;
+	u_int8_t *start;
+
+	if (bus == NULL)
+		return 0;
+
+	start = buf;
+	while (len != 0)
+	{
+		bytes2transfer = len;
+
+		if (bytes2transfer > 4)
+			bytes2transfer = 4;
+
+		if (FlexI2cWrite4(sc,
+				bus->device,
+				bus->unk4,
+				addr,
+				buf,
+				bytes2transfer,
+				bus->unkC,
+				bus->retr,
+				bus->unkD,
+				bus->unkE,
+				bus->unkF,
+				bus->unk14,
+				bus->eeprom,
+				bus->unk18) == 0)
+			return (buf - start);
+
+		if (len > bytes2transfer && bus->wait)
+			DELAY(bus->wait);
+
+		buf += bytes2transfer;
+		addr += bytes2transfer;
+		len -= bytes2transfer;
+	}
+	return (buf - start);
+}
+
+/*----------------------------------------------------------------*/
+u_int32_t
 FLEXI2C_read(struct adapter *sc, u_int32_t device, u_int32_t bus, u_int32_t addr, u_int8_t *buf, u_int32_t len)
 {
-	u_int32_t ChipAddr;
 	u_int32_t bytes2transfer;
 	u_int8_t *start;
 
@@ -125,9 +377,21 @@ FLEXI2C_read(struct adapter *sc, u_int32_t device, u_int32_t bus, u_int32_t addr
 		if (bytes2transfer > 4)
 			bytes2transfer = 4;
 
-		ChipAddr = fixChipAddr(device, bus, addr);
 
-		if (FlexI2cRead4(sc, device, ChipAddr, addr, buf, bytes2transfer) == 0)
+		if (FlexI2cRead4(sc,
+				device,
+				bus,
+				addr,
+				buf,
+				bytes2transfer,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0) == 0)
 			return (buf - start);
 
 		buf += bytes2transfer;
@@ -141,7 +405,6 @@ FLEXI2C_read(struct adapter *sc, u_int32_t device, u_int32_t bus, u_int32_t addr
 u_int32_t
 FLEXI2C_write(struct adapter *sc, u_int32_t device, u_int32_t bus, u_int32_t addr, u_int8_t *buf, u_int32_t len)
 {
-	u_int32_t ChipAddr;
 	u_int32_t bytes2transfer;
 	u_int8_t *start;
 
@@ -153,9 +416,20 @@ FLEXI2C_write(struct adapter *sc, u_int32_t device, u_int32_t bus, u_int32_t add
 		if (bytes2transfer > 4)
 			bytes2transfer = 4;
 
-		ChipAddr = fixChipAddr(device, bus, addr);
-
-		if (FlexI2cWrite4(sc, device, ChipAddr, addr, buf, bytes2transfer) == 0)
+		if (FlexI2cWrite4(sc,
+				device,
+				bus,
+				addr,
+				buf,
+				bytes2transfer,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0) == 0)
 			return (buf - start);
 
 		buf += bytes2transfer;

@@ -74,7 +74,7 @@ static struct cdevsw dvb_cdevsw = {
 #endif
 
 int
-dvb_dev_init(struct dvb_dev *dvbdev, int unit)
+dvb_dev_init(struct dvb_dev *dvbdev, int unit, device_t dev)
 {
 	DBG("\n");
 
@@ -84,6 +84,8 @@ dvb_dev_init(struct dvb_dev *dvbdev, int unit)
 				GID_WHEEL,
 				0600,
 				"dvb%d", unit);
+
+	dvbdev->dvb_node->si_drv1 = dev;
 
 	return 0;
 }
@@ -112,24 +114,23 @@ dvb_open(struct cdev *dev, int flags, int fmt, struct thread *td)
 	int unit;
 	int err;
 
-	unit = UNIT(minor(dev));
+	//unit = UNIT(minor(dev));
 
-	DBG("unit %d\n", unit);
-	sc = devclass_get_softc(skystar2_devclass, unit);
-
+	//DBG("unit %d\n", unit);
+	sc = device_get_softc(dev->si_drv1);
 	if (sc == NULL)
 	{
 		DBG("\n");
 		return ENXIO;
 	}
 
-	device_busy(devclass_get_device(skystar2_devclass, unit));
+	device_busy(dev->si_drv1);
 
-	switch( FUNCTION(minor(dev)) )
-	{
+	//switch( FUNCTION(minor(dev)) )
+	//{
 
 
-	}
+	//}
 
         return 0;
 }
@@ -145,11 +146,10 @@ dvb_close(struct cdev *dev, int flags, int fmt, struct thread *td)
         int unit;
 	int err;
 
-	unit = UNIT(minor(dev));
+	//unit = UNIT(minor(dev));
 
-        DBG("unit %d\n", unit);
-	sc = devclass_get_softc(skystar2_devclass, unit);
-
+        //DBG("unit %d\n", unit);
+	sc = device_get_softc(dev->si_drv1);
 	if (sc == NULL)
 	{
 		DBG("\n");
@@ -157,13 +157,13 @@ dvb_close(struct cdev *dev, int flags, int fmt, struct thread *td)
 	}
 
 
-	switch ( FUNCTION(minor(dev)) )
-	{
+	//switch ( FUNCTION(minor(dev)) )
+	//{
 
 
-	}
+	//}
 
-	device_unbusy(devclass_get_device(skystar2_devclass, unit));
+	device_unbusy(dev->si_drv1);
 
         return 0;
 }
@@ -201,11 +201,10 @@ dvb_ioctl(struct cdev *dev, u_long cmd, caddr_t arg, int flag, struct thread *td
 	int unit;
 	int err = 0;
 
-	unit = UNIT(minor(dev));
+	//unit = UNIT(minor(dev));
 
-	DBG1("unit %d\n", unit);
-	sc = devclass_get_softc(skystar2_devclass, unit);
-
+	//DBG1("unit %d\n", unit);
+	sc = device_get_softc(dev->si_drv1);
 	if (sc == NULL)
 	{
 		return ENXIO;

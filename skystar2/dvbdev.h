@@ -13,7 +13,7 @@ struct dvb_dev {
 };
 
 extern int
-dvb_dev_init(struct dvb_dev *dvbdev, int unit);
+dvb_dev_init(struct dvb_dev *dvbdev, int unit, device_t dev);
 
 extern int
 dvb_dev_release(struct dvb_dev *dvbdev);

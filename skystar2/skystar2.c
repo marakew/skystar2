@@ -1554,105 +1554,6 @@ dvb_stop_feed(struct dvb_demux_feed *dvbdmxfeed)
 	return 0;
 }
 
-/* --------------------------------------------------------------- */
-char *
-GetTunerName(unsigned char Id)
-{
-        switch (Id)
-        {
-        case 150:
-                return "CX24113_24123";
-
-        case 430:
-        case 431:
-        case 432:
-        case 433:
-                return "ATSC TDVS_H061F NIM";
-
-        case 140:
-        case 141:
-        case 142:
-        case 143:
-                return "ITD1000_PN1010";
-
-        case 420:
-                return "ATSC Samsung Nim witn Nxt2002 Demod";
-
-        case 100:
-        case 101:
-        case 102:
-        case 103:
-        case 104:
-                return "Mitel QPSK Tuner";
-
-        case 200:
-        case 201:
-        case 202:
-        case 210:
-        case 211:
-                return "Grundig LSI64781 NIM";
-
-        case 310:
-        case 311:
-        case 312:
-        case 320:
-        case 321:
-                return "QAM ST-STV0297 with MicroTune-MT2030";
-
-
-        case 330:
-        case 331:
-        case 332:
-        case 333:
-                return "QAM ST-STV0297 with Alps Tuner";
-
-        case 334:
-                return "QAM ST-STV0297 with Towner TNC5803A Tuner";
-
-        case 110:
-        case 111:
-        case 112:
-        case 113:
-        case 114:
-        case 115:
-        case 120:
-        case 121:
-        case 122:
-        case 123:
-        case 130:
-        case 131:
-        case 132:
-        case 133:
-        case 134:
-        case 135:
-        case 136:
-        case 137:
-                return "SamsungSTV0299NIM";
-
-        case 400:
-        case 410:
-                return "Broadcom BCM3510 with Panasonic Tuner";
-
-        case 300:
-                return "SAMSUNG TCMU30311PSB Tuner";
-
-        case 220:
-        case 221:
-        case 222:
-        case 230:
-        case 231:
-        case 232:
-        case 233:
-
-        case 224:
-        case 225:
-                return "Samsung MT352 NIM 78";
-
-        default:
-                return "Unknown Tuner!!!";
-        }
-}
-
 /*================================================================
 =
 =
@@ -1684,7 +1585,6 @@ skystar2_attach(device_t dev)
 	u_int32_t val;
 	struct adapter *sc;
 	struct dvb_demux	*dvbdemux;
-	unsigned char tunerInfo[64];
 	int 	rid, unit, error = 0;
 
 	DBG("\n");
@@ -1857,15 +1757,9 @@ skystar2_attach(device_t dev)
 		CtrlEnableMAC(sc, 1);
 	}
 
-	memset(tunerInfo, 0, 64);
-
-	EEPROM_readTunerInfo(sc, tunerInfo);
-
-	printf("Detected tuner: id=%x, '%s'\n", tunerInfo[0], GetTunerName(tunerInfo[0]));
-
 	if (fe_start(sc) < 0)
 	{
-		printf("Unsupported frontend !!!\n");
+		printf("Unknown frontend !!!\n");
 		error = ENXIO;
 		goto fail_frontend;
 	}
@@ -1882,7 +1776,7 @@ skystar2_attach(device_t dev)
 
 	dvb_net_init(sc, &sc->dvbnet, &dvbdemux->dmx);
 
-	dvb_dev_init(&sc->dvbdev, device_get_unit(dev));
+	dvb_dev_init(&sc->dvbdev, device_get_unit(dev), dev);
 
 	/* .... */
 

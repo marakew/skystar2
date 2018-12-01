@@ -83,11 +83,11 @@ SRAM_writeChunk(struct adapter *sc, u_int32_t addr, u_int8_t *buf, u_int16_t len
 	u_int32_t bank;
 
 	bank = 0;
-	if (sc->dwSramType == 0x20000)
+
+	if (sc->dwSramType == 0x20000 || sc->dwSramType == 0x30000)
 	{
 		bank = (addr & 0x18000) << 0x0D;
-	}
-
+	} else
 	if (sc->dwSramType == 0x00000)
 	{
 		if ((addr >> 0x0F) == 0)
@@ -106,11 +106,10 @@ SRAM_readChunk(struct adapter *sc, u_int32_t addr, u_int8_t *buf, u_int16_t len)
 	u_int32_t bank;
 
 	bank = 0;
-	if (sc->dwSramType == 0x20000)
+	if (sc->dwSramType == 0x20000 || sc->dwSramType == 0x30000)
 	{
 		bank = (addr & 0x18000) << 0x0D;
-	}
-
+	} else
 	if (sc->dwSramType == 0x00000)
 	{
 		if ((addr >> 0x0F) == 0)
@@ -141,9 +140,9 @@ SRAM_read(struct adapter *sc, u_int32_t addr, u_int8_t *buf, u_int32_t len)
 		}
 
 		SRAM_readChunk(sc, addr, buf, leng);
+		len -= leng;
 		addr += leng;
 		buf += leng;
-		len -= leng;
 	}
 }
 
@@ -166,9 +165,9 @@ SRAM_write(struct adapter *sc, u_int32_t addr, u_int8_t *buf, u_int32_t len)
 		}
 
 		SRAM_writeChunk(sc, addr, buf, leng);
+		len -= leng;
 		addr += leng;
 		buf += leng;
-		len -= leng;
 	}
 }
 
@@ -190,10 +189,12 @@ SRAM_init(struct adapter *sc)
 	tmp = read_reg(sc, 0x71C);
 	write_reg(sc, 0x71C, 1);
 
-	if (read_reg(sc, 0x71C) != 0){
+	if (read_reg(sc, 0x71C) != 0)
+	{
 		write_reg(sc, 0x71C, tmp);
 		sc->dwSramType = tmp & 0x30000;
-	} else {
+	} else
+	{
 		sc->dwSramType = 0x10000;
 	}	
 
@@ -246,18 +247,20 @@ SRAM_testLocation(struct adapter *sc, u_int32_t mask, u_int32_t addr)
 
 
 /*=================================================================
-= FlexcopII can work with 32K, 64K or 128K of external SRAM memory.
-=  - for 128K there are 4x32K chips at bank 0,1,2,3.
-=  - for  64K there are 2x32K chips at bank 1,2.
-=  - for  32K there is one 32K chip at bank 0.
-=
-= FlexCop works only with one bank at a time. The bank is selected
-= by bits 28-29 of the 0x700 register.
-= 
-= bank 0 covers addresses 0x00000-0x07FFF
-= bank 1 covers addresses 0x08000-0x0FFFF
-= bank 2 covers addresses 0x10000-0x17FFF
-= bank 3 covers addresses 0x18000-0x1FFFF
+  = FlexcopII can work with 32K, 64K or 128K of external SRAM memory.
+  =  - for 128K there are 4x32K chips at bank 0,1,2,3.
+  =  - for  64K there are 2x32K chips at bank 1,2.
+  =  - for  32K there is one 32K chip at bank 0.
+  =
+  = FlexCop works only with one bank at a time. The bank is selected
+  = by bits 28-29 of the 0x700 register.
+  = 
+  = bank 0 covers addresses 0x00000-0x07FFF
+  = bank 1 covers addresses 0x08000-0x0FFFF
+  = bank 2 covers addresses 0x10000-0x17FFF
+  = bank 3 covers addresses 0x18000-0x1FFFF
+
+  = FlexcopIII have 48K of external SRAM memory.
 ==================================================================*/
 
 /*----------------------------------------------------------------*/
@@ -266,6 +269,9 @@ SRAM_length(struct adapter *sc)
 {
         if (sc->dwSramType == 0x10000)
                 return 32768;
+
+	if (sc->dwSramType == 0x30000)
+		return 49152;
 
         if (sc->dwSramType == 0x00000)
                 return 65536;
@@ -293,28 +299,32 @@ SramDetectForFlex2(struct adapter *sc)
 
 	write_reg(sc, 0x71C, tmp2);
 
-	if (tmp3 != 1){
+	if (tmp3 != 1)
+	{
 		SRAM_setSize(sc, 0x10000);
 		SRAM_init(sc);
 		write_reg(sc, 0x208, tmp);
 		return 32;
 	}	
 
-	if (SRAM_testLocation(sc, 0x20000, 0x18000) != 0){
+	if (SRAM_testLocation(sc, 0x20000, 0x18000) != 0)
+	{
 		SRAM_setSize(sc, 0x20000);
 		SRAM_init(sc);
 		write_reg(sc, 0x208, tmp);
 		return 128;
 	}		
         
-	if (SRAM_testLocation(sc, 0x00000, 0x10000) != 0){
+	if (SRAM_testLocation(sc, 0x00000, 0x10000) != 0)
+	{
 		SRAM_setSize(sc, 0x00000);
 		SRAM_init(sc);
 		write_reg(sc, 0x208, tmp);
 		return 64;
 	}		
 
-	if (SRAM_testLocation(sc, 0x10000, 0x00000) != 0){
+	if (SRAM_testLocation(sc, 0x10000, 0x00000) != 0)
+	{
 		SRAM_setSize(sc, 0x10000);
 		SRAM_init(sc);
 		write_reg(sc, 0x208, tmp);
@@ -329,8 +339,21 @@ SramDetectForFlex2(struct adapter *sc)
 }
 
 
+/*----------------------------------------------------------------*/
+int
+SramDetectForFlex3(struct adapter *sc)
+{
+	SRAM_setSize(sc, 0x30000);
+	SRAM_init(sc);
+	return 48;
+}
+	
 int
 SLL_detectSramSize(struct adapter *sc)
 {
-	return SramDetectForFlex2(sc);
+
+//	if (SllGetFlexRevision(sc, NULL, NULL) == 192)
+//		return SramDetectForFlex3(sc);
+//	else
+		return SramDetectForFlex2(sc);
 }

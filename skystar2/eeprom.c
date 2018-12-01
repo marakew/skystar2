@@ -6,17 +6,55 @@
 #include "sllutil.h"
 
 /*----------------------------------------------------------------*/
-static int
+int
 EEPROM_write(struct adapter *sc, u_int16_t addr, u_int8_t *buf, u_int16_t len)
 {
-	return FLEXI2C_write(sc, 0x20000000, 0x50, addr, buf, len);
+	int res;
+	struct _I2CBUS	bus;
+
+	bus.device = 0x20000000;
+	bus.unk4 = ((addr & 0x300) | 0x5000) >> 8;
+	bus.retr = 500;
+	bus.unkC = 0;
+	bus.unkD = 0;
+	bus.unkE = 0;
+	bus.unkF = 0;
+	bus.eeprom = 1;
+	bus.unk14 = 0;
+	bus.unk18 = 0;
+	bus.wait = 5;
+
+	res = FLEXI2C_busWrite(sc, &bus, addr, buf, len);
+	
+	DELAY(5);
+
+	return res;
 }
 
 /*----------------------------------------------------------------*/
-static int
+int
 EEPROM_read(struct adapter *sc, u_int16_t addr, u_int8_t *buf, u_int16_t len)
 {
-	return FLEXI2C_read(sc, 0x20000000, 0x50, addr, buf, len);
+	int res;
+	struct _I2CBUS	bus;
+
+	bus.device = 0x20000000;
+	bus.unk4 = ((addr & 0x300) | 0x5000) >> 8;
+	bus.retr = 500;
+	bus.unkC = 0;
+	bus.unkD = 0;
+	bus.unkE = 0;
+	bus.unkF = 0;
+	bus.eeprom = 1;
+	bus.unk14 = 0;
+	bus.unk18 = 0;
+	bus.wait = 5;
+
+	res = FLEXI2C_busRead(sc, &bus, addr, buf, len);
+	
+	DELAY(5);
+
+	return res;
 }
 
 /*----------------------------------------------------------------*/
@@ -131,42 +169,5 @@ EEPROM_setMacAddr(struct adapter *sc, char type, u_int8_t *mac)
 		return 1;
 	}
 	return 0;
-}
-
-/*----------------------------------------------------------------*/
-int
-EEPROM_writeTunerInfo(struct adapter *sc, unsigned char *info)
-{
-	unsigned char tmp1[68];
-	unsigned char tmp2[68];
-	int res;
-
-	tmp1[0] = 0xB2;
-	memcpy(&tmp1[1], info, 64);
-	tmp1[65] = 0xC2;
-	tmp1[66] = calc_LRC(tmp1, 66);
-
-	res = 1;
-
-	return res;
-}
-
-/*----------------------------------------------------------------*/
-int
-EEPROM_readTunerInfo(struct adapter *sc, unsigned char *info)
-{
-	unsigned char tmp[80];
-	int res;
-
-	res = EEPROM_LRC_read(sc, 0x3B5, 67, tmp, 4);
-
-	if (tmp[0] == 0xB2 && tmp[65] == 0xC2)
-	{
-		if (info != NULL)
-		{
-			memcpy(info, &tmp[1], 64);
-		}
-	}
-	return res;
 }
 

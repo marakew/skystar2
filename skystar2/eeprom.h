@@ -20,10 +20,4 @@ EEPROM_getMacAddr(struct adapter *sc, char type, u_int8_t *mac);
 extern int
 EEPROM_setMacAddr(struct adapter *sc, char type, u_int8_t *mac);
 
-extern int
-EEPROM_writeTunerInfo(struct adapter *sc, unsigned char *info);
-
-extern int
-EEPROM_readTunerInfo(struct adapter *sc, unsigned char *info);
-
 #endif
