@@ -10,12 +10,18 @@ SRCS+=	sllutil.c
 SRCS+=	i2c.c
 SRCS+=	eeprom.c
 SRCS+=	sram.c
-SRCS+=	diseqc.c
+#SRCS+=	diseqc.c
 SRCS+=	frontend.c
 
 # frontend chip's
-SRCS+=	samsung_tbdu18132.c
-SRCS+=	samsung_tbmu24112.c
+SRCS+=	cobra_reg.c
+SRCS+=	cobra_tuner.c
+SRCS+=	cobra_drv.c
+SRCS+=	cobra_api.c
+SRCS+=	cobra_cx24113.c
+SRCS+=	cobra_cx24128.c
+
+SRCS+=	cx24123_24113.c
 
 # dvb-core
 SRCS+=	dvbdmx.c dvbnet.c dvbdev.c

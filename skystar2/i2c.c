@@ -6,14 +6,14 @@
 #include "sllutil.h"
 
 /*----------------------------------------------------------------*/
-static u_int32_t
+u_int32_t
 FlexI2cRW(struct adapter *sc,	//0
 	u_int32_t device,	//4
 	u_int32_t chip_addr,	//8
-	u_int32_t dir,	//C
-	u_int16_t addr,	//10
-	u_int8_t *buf,	//14
-	u_int32_t len,	//18
+	u_int32_t dir,		//C
+	u_int32_t addr,		//10
+	u_int8_t *buf,		//14
+	u_int32_t len,		//18
 	unsigned int unkC,	//1C
 	unsigned int retr,	//20
 	unsigned int unkD,	//24
@@ -34,6 +34,7 @@ FlexI2cRW(struct adapter *sc,	//0
 	int done;
 
 	res = 0;
+	bankval = 0;
 
 	if (bank)
 	{
@@ -57,11 +58,12 @@ FlexI2cRW(struct adapter *sc,	//0
 		chip_addr |= ((addr >> 8) & 3);
 	}
 
-	cmd = device | ((len - 1) << 26) | (1 << 16) | (addr << 8) | chip_addr;
+	cmd = device | ((len - 1) << 26) | (0 << 16) | (addr << 8) | chip_addr;
+	cmd |= 0x01000000;
 
 	if (dir != 0)
 	{
-		cmd |= 0x2000000;
+		cmd |= 0x02000000;
 	} else
 	{
 		cmd |= (buf[0] << 16);
@@ -170,6 +172,7 @@ FlexI2cRW(struct adapter *sc,	//0
 				{
 					if (dir != 0 && len > 0)
 						memset(&buf[0], 0xFF, len);
+					done = 1;
 				}
 			} else
 			{
@@ -191,9 +194,9 @@ FlexI2cRW(struct adapter *sc,	//0
 						}
 					}
 				}
+				done = 1;
 				res = 1;
 			}
-			done = 1;
 			break;
 
 		} //switch
@@ -377,7 +380,6 @@ FLEXI2C_read(struct adapter *sc, u_int32_t device, u_int32_t bus, u_int32_t addr
 		if (bytes2transfer > 4)
 			bytes2transfer = 4;
 
-
 		if (FlexI2cRead4(sc,
 				device,
 				bus,
@@ -437,44 +439,5 @@ FLEXI2C_write(struct adapter *sc, u_int32_t device, u_int32_t bus, u_int32_t add
 		len -= bytes2transfer;
 	}
 	return (buf - start);
-}
-
-/*----------------------------------------------------------------*/
-int
-master_xfer(struct adapter *sc, const struct i2c_msg *msgs, int num)
-{
-	int i, ret = 0;
-	int s;
-
-	/* read */
-	if ((num == 2) &&
-	    (msgs[0].flags == 0) && 
-	    (msgs[1].flags == I2C_M_RD) &&
-	    (msgs[0].buf != NULL) && (msgs[1].buf != NULL))
-	{
-
-		ret = FLEXI2C_read(sc, 0x10000000, msgs[0].addr, msgs[0].buf[0], msgs[1].buf, msgs[1].len);
-
-		if (ret != msgs[1].len)
-			ret =  -EIO;
-		ret = num;
-	} else
-	/* write */
-	for (i = 0; i < num; i++){
-		if ((msgs[i].flags != 0) || 
-		    (msgs[i].buf == NULL) || 
-		    (msgs[i].len < 2))
-		{
-			ret =  -EINVAL;
-			break;
-		}
-
-		ret = FLEXI2C_write(sc, 0x10000000, msgs[i].addr, msgs[i].buf[0], &msgs[i].buf[1], msgs[i].len - 1);
-		if (ret != msgs[0].len - 1)
-			ret = -EIO;
-		ret = num;
-	}
-
-	return ret;
 }
 

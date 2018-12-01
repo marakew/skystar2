@@ -18,13 +18,13 @@ struct _I2CBUS
 	unsigned int	retr;	//retr	unk8
 
 	unsigned char	unkC;	
-	unsigned char	unkD;	//state
+	unsigned char	unkD;	//
 	unsigned char	unkE;
 	unsigned char	unkF;		//base_addr
 
 	unsigned int	eeprom;	//eeprom	//unk10
 	unsigned int	unk14;		//chip_addr
-	unsigned int	unk18;	//sm
+	unsigned int	unk18;	//banksw
 	unsigned int	wait;	//delay	//ukn1C
 };
 
@@ -51,8 +51,6 @@ FLEXI2C_read(struct adapter *sc, u_int32_t device, u_int32_t bus, u_int32_t addr
 extern u_int32_t
 FLEXI2C_write(struct adapter *sc, u_int32_t device, u_int32_t bus, u_int32_t addr, u_int8_t *buf, u_int32_t len);
 
-extern int
-master_xfer(struct adapter *sc, const struct i2c_msg *msgs, int num);
 
 #endif
 
